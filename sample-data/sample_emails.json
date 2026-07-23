@@ -1,0 +1,17 @@
+[
+  {
+    "subject": "My internet has been down for 3 days!",
+    "body": "Hi, I am absolutely furious. My broadband has not worked for 3 days now. I work from home and this is causing me serious problems. I have called your support line twice and been put on hold for over an hour each time. This is completely unacceptable. I want this fixed today or I am cancelling my contract.",
+    "sender": "angry.customer@email.com"
+  },
+  {
+    "subject": "Query about my latest bill",
+    "body": "Hello, I received my bill this month and it seems higher than usual. I was expecting to pay around 45 pounds but the bill shows 67 pounds. Could you please explain the additional charges? I have been a customer for 5 years and never had this issue before.",
+    "sender": "john.smith@email.com"
+  },
+  {
+    "subject": "Would like to upgrade my plan",
+    "body": "Hi there, I am currently on the Basic 50MB plan and would like to find out about upgrading to a faster package. Could you let me know what options are available and the costs involved? I am particularly interested in whether you offer any loyalty discounts for existing customers.",
+    "sender": "sarah.jones@email.com"
+  }
+]

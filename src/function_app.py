@@ -18,31 +18,24 @@ import azure.functions as func  # Azure Functions SDK
 import logging                  # For Application Insights logging
 import json                     # For parsing and returning JSON
 import os                       # For reading environment variables
-from openai import AzureOpenAI  # Azure OpenAI client
+import urllib.request           # For making HTTP requests to Azure AI Foundry
+import urllib.error             # For handling HTTP errors
 
 # Initialise the Function App using Python v2 programming model
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
-
-# Initialise Azure OpenAI client using environment variables
-# These are set in Function App configuration in Azure Portal
-client = AzureOpenAI(
-    api_key=os.environ["AZURE_OPENAI_API_KEY"],
-    api_version="2024-12-01-preview",
-    azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"]
-)
 
 @app.route(route="analyse_email", methods=["POST"])
 def analyse_email(req: func.HttpRequest) -> func.HttpResponse:
     """
     HTTP trigger function that analyses a customer email using gpt-5-mini.
-    
+
     Expected request body:
         {
             "subject": "Email subject line",
             "body": "Full email body text",
             "sender": "customer@example.com"
         }
-    
+
     Returns:
         JSON with intent, sentiment, routing_team, priority, and summary
     """
@@ -64,7 +57,6 @@ def analyse_email(req: func.HttpRequest) -> func.HttpResponse:
             )
 
         # Build the prompt for gpt-5-mini
-        # Instructs the model to return structured JSON only
         prompt = f"""
 You are an AI assistant for Galaxy Telecom customer service.
 Analyse the following customer email and return a JSON response only.
@@ -83,19 +75,41 @@ Return ONLY a JSON object with these fields:
 }}
 """
 
-        # Call gpt-5-mini via Azure AI Foundry endpoint
-        response = client.chat.completions.create(
-            model="gpt-5-mini",         # Deployment name in Azure AI Foundry
-            messages=[
-                {"role": "system", "content": "You are a customer service triage assistant. Always respond with valid JSON only."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=300,             # Enough for the structured JSON response
-            temperature=0.1             # Low temperature for consistent, predictable output
+        # Get Azure AI Foundry credentials from environment variables
+        api_key = os.environ["AZURE_OPENAI_API_KEY"]
+        endpoint = os.environ["AZURE_OPENAI_ENDPOINT"]
+
+        # Build the request payload for the Responses API
+        payload = {
+            "model": "gpt-5-mini",
+            "input": prompt
+        }
+
+        # Make HTTP POST request to Azure AI Foundry Responses API
+        request_data = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            endpoint,
+            data=request_data,
+            headers={
+                "Content-Type": "application/json",
+                "api-key": api_key
+            },
+            method="POST"
         )
 
-        # Extract the text response from the model
-        result_text = response.choices[0].message.content.strip()
+        # Execute the request and parse the response
+        with urllib.request.urlopen(request) as response:
+            response_data = json.loads(response.read().decode("utf-8"))
+
+        # Extract the text output from the Responses API result
+        result_text = response_data["output"][0]["content"][0]["text"].strip()
+
+        # Clean up markdown code blocks if model wraps response in them
+        if result_text.startswith("```"):
+            result_text = result_text.split("```")[1]
+            if result_text.startswith("json"):
+                result_text = result_text[4:]
+            result_text = result_text.strip()
 
         # Parse the model response as JSON to validate it
         result_json = json.loads(result_text)
@@ -111,7 +125,6 @@ Return ONLY a JSON object with these fields:
         )
 
     except json.JSONDecodeError as e:
-        # Model returned something that wasn't valid JSON
         logging.error(f"JSON parse error: {str(e)}")
         return func.HttpResponse(
             json.dumps({"error": "Model returned invalid JSON", "detail": str(e)}),
@@ -119,8 +132,16 @@ Return ONLY a JSON object with these fields:
             mimetype="application/json"
         )
 
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8")
+        logging.error(f"HTTP error calling AI Foundry: {e.code} - {error_body}")
+        return func.HttpResponse(
+            json.dumps({"error": f"Error code: {e.code}", "detail": error_body}),
+            status_code=500,
+            mimetype="application/json"
+        )
+
     except Exception as e:
-        # Catch all other errors and return 500
         logging.error(f"Unexpected error: {str(e)}")
         return func.HttpResponse(
             json.dumps({"error": "Internal server error", "detail": str(e)}),

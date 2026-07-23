@@ -1,0 +1,14 @@
+# Requirements:
+#     requirements.txt
+# Description:
+#     Python package dependencies for the Azure Function App.
+#     Pinned versions ensure consistent deployments across environments.
+# Author:
+#     Gayatri Anne
+# Created:
+#     23-Jul-2026
+
+azure-functions==1.21.3
+openai>=1.0.0
+azure-identity>=1.15.0
+azure-keyvault-secrets>=4.7.0

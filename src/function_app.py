@@ -100,9 +100,19 @@ Return ONLY a JSON object with these fields:
         # Execute the request and parse the response
         with urllib.request.urlopen(request) as response:
             response_data = json.loads(response.read().decode("utf-8"))
+        
+        # Log full response for debugging
+        logging.info(f"Full API response: {json.dumps(response_data)}")
 
-        # Extract the text output from the Responses API result
-        result_text = response_data["output"][0]["content"][0]["text"].strip()
+        # Extract text — handle different response structures
+        try:
+            result_text = response_data["output"][0]["content"][0]["text"].strip()
+        except (KeyError, IndexError):
+            return func.HttpResponse(
+                json.dumps({"debug": response_data}),
+                status_code=200,
+                mimetype="application/json"
+            )
 
         # Clean up markdown code blocks if model wraps response in them
         if result_text.startswith("```"):

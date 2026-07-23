@@ -100,17 +100,21 @@ Return ONLY a JSON object with these fields:
         # Execute the request and parse the response
         with urllib.request.urlopen(request) as response:
             response_data = json.loads(response.read().decode("utf-8"))
-        
-        # Log full response for debugging
-        logging.info(f"Full API response: {json.dumps(response_data)}")
 
-        # Extract text — handle different response structures
-        try:
-            result_text = response_data["output"][0]["content"][0]["text"].strip()
-        except (KeyError, IndexError):
+        # Extract text from Responses API
+        # output[0] is reasoning block, output[1] is the message block
+        result_text = None
+        for output_item in response_data.get("output", []):
+            if output_item.get("type") == "message":
+                for content_item in output_item.get("content", []):
+                    if content_item.get("type") == "output_text":
+                        result_text = content_item["text"].strip()
+                        break
+
+        if not result_text:
             return func.HttpResponse(
-                json.dumps({"debug": response_data}),
-                status_code=200,
+                json.dumps({"error": "No text output found in API response"}),
+                status_code=500,
                 mimetype="application/json"
             )
 

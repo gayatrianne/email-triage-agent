@@ -30,6 +30,8 @@ An end to end AI-powered email triage pipeline on Microsoft Azure that:
 ---
 
 ## 3. Architecture
+
+```
 Customer Email
 (galaxy.telecom.helpdesk@outlook.com)
 ↓

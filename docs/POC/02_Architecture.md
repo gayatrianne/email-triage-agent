@@ -95,6 +95,7 @@ orchestration, AI analysis, and report delivery.
 
 ## 5. Data Flow
 
+```
 Logic App triggers (HTTP or schedule)
 Logic App reads OAuth refresh token from Key Vault
 Logic App exchanges refresh token for access token via Microsoft identity platform

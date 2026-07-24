@@ -113,21 +113,25 @@ Logic App calls send_report Function App with SAS URL and access token
 send_report downloads CSV via SAS URL
 send_report encodes CSV as base64 and sends via Graph API sendMail
 L3 team receives email with CSV attachment
+```
+
 ---
 
 ## 6. CI/CD Pipeline
+
+```
 Developer pushes to main branch
-↓
+    ↓
 GitHub Actions workflow triggers
-↓
+    ↓
 Python 3.11 environment setup
-↓
+    ↓
 Dependencies installed (requirements.txt)
-↓
+    ↓
 Azure CLI login (service principal)
-↓
-src/ folder zipped and deployed to
-func-email-triage-dev via Azure CLI
+    ↓
+src/ folder zipped and deployed to func-email-triage-dev via Azure CLI
+```
 
 ---
 

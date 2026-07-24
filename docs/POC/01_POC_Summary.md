@@ -45,6 +45,8 @@ Azure Logic App (Orchestrator)
 ↓
 L3 Team Email with CSV Attachment
 (galaxy.telecom.L3@outlook.com)
+```
+
 ### Azure Components
 
 | Component | Resource | Purpose |

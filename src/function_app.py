@@ -2,12 +2,15 @@
 Module:
     function_app.py
 Description:
-    Azure Function App (HTTP trigger) that receives a single customer email
-    via HTTP POST, calls Azure AI Foundry (gpt-5-mini) to analyse the email,
-    and returns a structured JSON response containing intent, sentiment,
-    routing team, and summary. This function is called by the Logic App
-    orchestrator for each email retrieved from the Galaxy Telecom helpdesk
-    inbox.
+    Azure Function App with two HTTP triggers:
+    1. analyse_email — receives a single customer email, calls Azure AI Foundry
+       (gpt-5-mini) to analyse it, and returns a structured JSON response
+       containing intent, sentiment, routing team, priority and summary.
+    2. send_report — receives a CSV blob URL and access token, downloads the
+       CSV from Azure Blob Storage and sends it as an email attachment to the
+       L3 team via Microsoft Graph API.
+    Both functions are called by the Logic App orchestrator as part of the
+    Galaxy Telecom AI Email Triage pipeline.
 Author:
     Gayatri Anne
 Created:
@@ -18,11 +21,15 @@ import azure.functions as func  # Azure Functions SDK
 import logging                  # For Application Insights logging
 import json                     # For parsing and returning JSON
 import os                       # For reading environment variables
-import urllib.request           # For making HTTP requests to Azure AI Foundry
+import urllib.request           # For making HTTP requests
 import urllib.error             # For handling HTTP errors
+import base64                   # For encoding CSV as base64 email attachment
 
 # Initialise the Function App using Python v2 programming model
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
+
+
+# ── Function 1: analyse_email ──────────────────────────────────────────────────
 
 @app.route(route="analyse_email", methods=["POST"])
 def analyse_email(req: func.HttpRequest) -> func.HttpResponse:
@@ -151,6 +158,133 @@ Return ONLY a JSON object with these fields:
         logging.error(f"HTTP error calling AI Foundry: {e.code} - {error_body}")
         return func.HttpResponse(
             json.dumps({"error": f"Error code: {e.code}", "detail": error_body}),
+            status_code=500,
+            mimetype="application/json"
+        )
+
+    except Exception as e:
+        logging.error(f"Unexpected error: {str(e)}")
+        return func.HttpResponse(
+            json.dumps({"error": "Internal server error", "detail": str(e)}),
+            status_code=500,
+            mimetype="application/json"
+        )
+
+
+# ── Function 2: send_report ────────────────────────────────────────────────────
+
+@app.route(route="send_report", methods=["POST"])
+def send_report(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    HTTP trigger function that downloads a CSV from Blob Storage and sends
+    it as an email attachment to the L3 team via Microsoft Graph API.
+
+    Expected request body:
+        {
+            "to_email": "galaxy.telecom.L3@outlook.com",
+            "csv_blob_url": "https://storage.blob.core.windows.net/...",
+            "email_count": 2,
+            "report_date": "23 Jul 2026",
+            "access_token": "Bearer token string"
+        }
+
+    Returns:
+        JSON with status and emails_processed count
+    """
+    logging.info("send_report function triggered")
+
+    try:
+        # Parse the incoming JSON request body
+        req_body = req.get_json()
+        to_email = req_body.get("to_email", "")
+        csv_blob_url = req_body.get("csv_blob_url", "")
+        email_count = req_body.get("email_count", 0)
+        report_date = req_body.get("report_date", "")
+        access_token = req_body.get("access_token", "")
+
+        # Validate required fields
+        if not to_email or not csv_blob_url or not access_token:
+            return func.HttpResponse(
+                json.dumps({"error": "Missing required fields: to_email, csv_blob_url, access_token"}),
+                status_code=400,
+                mimetype="application/json"
+            )
+
+        # Download the CSV file from Blob Storage using the blob URL
+        logging.info(f"Downloading CSV from: {csv_blob_url}")
+        with urllib.request.urlopen(csv_blob_url) as response:
+            csv_content = response.read()
+
+        # Encode the CSV content as base64 for the email attachment
+        csv_base64 = base64.b64encode(csv_content).decode("utf-8")
+
+        # Build the attachment filename from the report date
+        attachment_name = f"triage-report-{report_date.replace(' ', '-')}.csv"
+
+        # Build the Graph API sendMail request payload
+        # Note: @odata.type is a required Graph API field for typed attachments
+        email_payload = {
+            "message": {
+                "subject": f"Galaxy Telecom — Daily Email Triage Report — {report_date}",
+                "body": {
+                    "contentType": "Text",
+                    "content": f"Please find attached the daily email triage report for {report_date}.\n\nTotal emails processed: {email_count}\n\nAll customer emails have been analysed and routed accordingly.\n\nThis is an automated report generated by the Galaxy Telecom AI Email Triage Agent."
+                },
+                "toRecipients": [
+                    {
+                        "emailAddress": {
+                            "address": to_email
+                        }
+                    }
+                ],
+                "attachments": [
+                    {
+                        "@odata.type": "#microsoft.graph.fileAttachment",
+                        "name": attachment_name,
+                        "contentType": "text/csv",
+                        "contentBytes": csv_base64
+                    }
+                ]
+            }
+        }
+
+        # Send email via Microsoft Graph API using the helpdesk account as sender
+        sender_email = "galaxy.telecom.helpdesk@outlook.com"
+        graph_url = f"https://graph.microsoft.com/v1.0/users/{sender_email}/sendMail"
+
+        request_data = json.dumps(email_payload).encode("utf-8")
+        graph_request = urllib.request.Request(
+            graph_url,
+            data=request_data,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json"
+            },
+            method="POST"
+        )
+
+        # Execute the Graph API request — successful sendMail returns 202
+        with urllib.request.urlopen(graph_request) as response:
+            status_code = response.status
+
+        logging.info(f"Email sent successfully to {to_email}, status: {status_code}")
+
+        # Return success response
+        return func.HttpResponse(
+            json.dumps({
+                "status": "success",
+                "message": f"Report sent to {to_email}",
+                "emails_processed": email_count
+            }),
+            status_code=200,
+            mimetype="application/json"
+        )
+
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8")
+        logging.error(f"HTTP error: {e.code} - {error_body}")
+        return func.HttpResponse(
+            json.dumps({"error": f"HTTP error: {e.code}", "detail": error_body}),
             status_code=500,
             mimetype="application/json"
         )

@@ -1,0 +1,345 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "When_an_HTTP_request_is_received": {
+                "type": "Request",
+                "kind": "Http"
+            }
+        },
+        "actions": {
+            "Get_secret": {
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['keyvault-1']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/secrets/@{encodeURIComponent('graph-refresh-token')}/value"
+                },
+                "runAfter": {},
+                "runtimeConfiguration": {
+                    "secureData": {
+                        "properties": [
+                            "inputs",
+                            "outputs"
+                        ]
+                    }
+                }
+            },
+            "HTTP": {
+                "type": "Http",
+                "inputs": {
+                    "uri": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+                    "method": "POST",
+                    "headers": {
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    },
+                    "body": "client_id=57b54c76-1f5f-420f-b87f-7ed2806b5ad0&scope=https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Mail.Send offline_access&refresh_token=@{body('Get_secret')?['value']}&grant_type=refresh_token\n"
+                },
+                "runAfter": {
+                    "Get_secret": [
+                        "Succeeded"
+                    ]
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "HTTP_1": {
+                "type": "Http",
+                "inputs": {
+                    "uri": "https://graph.microsoft.com/v1.0/users/galaxy.telecom.helpdesk@outlook.com/messages?$top=10&$filter=isRead%20eq%20false",
+                    "method": "GET",
+                    "headers": {
+                        "Authorization": "@{concat('Bearer ', body('HTTP')?['access_token'])}",
+                        "Content-Type": "application/json",
+                        "Prefer": "outlook.body-content-type=\"text\""
+                    }
+                },
+                "runAfter": {
+                    "HTTP": [
+                        "Succeeded"
+                    ]
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "Parse_JSON": {
+                "type": "ParseJson",
+                "inputs": {
+                    "content": "@body('HTTP_1')",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "value": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "subject": {
+                                            "type": "string"
+                                        },
+                                        "from": {
+                                            "type": "object",
+                                            "properties": {
+                                                "emailAddress": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "address": {
+                                                            "type": "string"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "body": {
+                                            "type": "object",
+                                            "properties": {
+                                                "content": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "runAfter": {
+                    "HTTP_1": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "Initialize_CSV": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "csv_content",
+                            "type": "string",
+                            "value": "subject,sender,intent,sentiment,routing_team,priority,summary\n"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Parse_JSON": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "Initialize_count": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "email_count",
+                            "type": "integer",
+                            "value": 0
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_CSV": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "For_each": {
+                "type": "Foreach",
+                "foreach": "@body('Parse_JSON')?['value']",
+                "actions": {
+                    "HTTP_2": {
+                        "type": "Http",
+                        "inputs": {
+                            "uri": "https://func-email-triage-dev-chedbdgjhnbgcyhn.uksouth-01.azurewebsites.net/api/analyse_email?code=R-u1pgM845SUktP-9eSpUIYO51beryuqGzdwu6U5WmRaAzFubvMlfw==",
+                            "method": "POST",
+                            "headers": {
+                                "Content-Type": "application/json"
+                            },
+                            "body": {
+                                "subject": "@{items('For_each')?['subject']}",
+                                "body": "@{items('For_each')?['body']?['content']}",
+                                "sender": "@{items('For_each')?['from']?['emailAddress']?['address']}"
+                            },
+                            "retryPolicy": {
+                                "type": "fixed",
+                                "count": 3,
+                                "interval": "PT30S"
+                            }
+                        },
+                        "runtimeConfiguration": {
+                            "contentTransfer": {
+                                "transferMode": "Chunked"
+                            }
+                        }
+                    },
+                    "Append_CSV_row": {
+                        "type": "AppendToStringVariable",
+                        "inputs": {
+                            "name": "csv_content",
+                            "value": "@{concat('\"', items('For_each')?['subject'], '\",\"', items('For_each')?['from']?['emailAddress']?['address'], '\",\"', body('HTTP_2')?['intent'], '\",\"', body('HTTP_2')?['sentiment'], '\",\"', body('HTTP_2')?['routing_team'], '\",\"', body('HTTP_2')?['priority'], '\",\"', body('HTTP_2')?['summary'], '\"\n')}"
+                        },
+                        "runAfter": {
+                            "HTTP_2": [
+                                "Succeeded"
+                            ]
+                        }
+                    },
+                    "Increment_count": {
+                        "type": "IncrementVariable",
+                        "inputs": {
+                            "name": "email_count",
+                            "value": 1
+                        },
+                        "runAfter": {
+                            "Append_CSV_row": [
+                                "Succeeded"
+                            ]
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Initialize_count": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "Create_blob": {
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azureblob']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": "@variables('csv_content')",
+                    "headers": {
+                        "ReadFileMetadataFromServer": true
+                    },
+                    "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('rgemailtriagedevaef4'))}/files",
+                    "queries": {
+                        "folderPath": "/email-triage-output",
+                        "name": "@{concat(formatDateTime(utcNow(), 'yyyy-MM-dd'), '-triage-report.csv')}",
+                        "queryParametersSingleEncoded": true
+                    }
+                },
+                "runAfter": {
+                    "For_each": [
+                        "Succeeded"
+                    ]
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "Send_email_with_attachment": {
+                "type": "Http",
+                "inputs": {
+                    "uri": "https://func-email-triage-dev-chedbdgjhnbgcyhn.uksouth-01.azurewebsites.net/api/send_report?code=R-u1pgM845SUktP-9eSpUIYO51beryuqGzdwu6U5WmRaAzFubvMlfw==",
+                    "method": "POST",
+                    "headers": {
+                        "Content-Type": "application/json"
+                    },
+                    "body": {
+                        "to_email": "galaxy.telecom.L3@outlook.com",
+                        "csv_blob_url": "@{body('Create_SAS_URI_by_path_(V2)')?['WebUrl']}",
+                        "email_count": "@{variables('email_count')}",
+                        "report_date": "@{formatDateTime(utcNow(), 'dd MMM yyyy')}",
+                        "access_token": "@{body('HTTP')?['access_token']}"
+                    }
+                },
+                "runAfter": {
+                    "Create_SAS_URI_by_path_(V2)": [
+                        "Succeeded"
+                    ]
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "Create_SAS_URI_by_path_(V2)": {
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azureblob-1']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": {
+                        "Permissions": "Read",
+                        "ExpiryTime": "@addHours(utcNow(), 24)"
+                    },
+                    "path": "/v2/datasets/@{encodeURIComponent('rgemailtriagedevaef4')}/CreateSharedLinkByPath",
+                    "queries": {
+                        "path": "/email-triage-output/@{concat(formatDateTime(utcNow(), 'yyyy-MM-dd'), '-triage-report.csv')}"
+                    }
+                },
+                "runAfter": {
+                    "Create_blob": [
+                        "Succeeded"
+                    ]
+                }
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "keyvault-1": {
+                    "id": "/subscriptions/a55387e7-ecf8-493a-8e9e-2e2467638f07/providers/Microsoft.Web/locations/uksouth/managedApis/keyvault",
+                    "connectionId": "/subscriptions/a55387e7-ecf8-493a-8e9e-2e2467638f07/resourceGroups/rg-email-triage-dev/providers/Microsoft.Web/connections/keyvault-1",
+                    "connectionName": "keyvault-1",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                },
+                "azureblob": {
+                    "id": "/subscriptions/a55387e7-ecf8-493a-8e9e-2e2467638f07/providers/Microsoft.Web/locations/uksouth/managedApis/azureblob",
+                    "connectionId": "/subscriptions/a55387e7-ecf8-493a-8e9e-2e2467638f07/resourceGroups/rg-email-triage-dev/providers/Microsoft.Web/connections/azureblob",
+                    "connectionName": "azureblob",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                },
+                "azureblob-1": {
+                    "id": "/subscriptions/a55387e7-ecf8-493a-8e9e-2e2467638f07/providers/Microsoft.Web/locations/uksouth/managedApis/azureblob",
+                    "connectionId": "/subscriptions/a55387e7-ecf8-493a-8e9e-2e2467638f07/resourceGroups/rg-email-triage-dev/providers/Microsoft.Web/connections/azureblob-1",
+                    "connectionName": "azureblob-1",
+                    "connectionProperties": {}
+                }
+            }
+        }
+    }
+}

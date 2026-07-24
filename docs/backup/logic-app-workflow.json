@@ -165,7 +165,7 @@
                     "HTTP_2": {
                         "type": "Http",
                         "inputs": {
-                            "uri": "https://func-email-triage-dev-chedbdgjhnbgcyhn.uksouth-01.azurewebsites.net/api/analyse_email?code=R-u1pgM845SUktP-9eSpUIYO51beryuqGzdwu6U5WmRaAzFubvMlfw==",
+                            "uri": "https://REPLACE_WITH_YOUR_FUNCTION_APP_HOSTNAME/api/analyse_email?code=REPLACE_WITH_YOUR_FUNCTION_HOST_KEY",
                             "method": "POST",
                             "headers": {
                                 "Content-Type": "application/json"
@@ -231,7 +231,7 @@
                     "headers": {
                         "ReadFileMetadataFromServer": true
                     },
-                    "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('rgemailtriagedevaef4'))}/files",
+                    "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('REPLACE_WITH_YOUR_STORAGE_ACCOUNT_NAME'))}/files",
                     "queries": {
                         "folderPath": "/email-triage-output",
                         "name": "@{concat(formatDateTime(utcNow(), 'yyyy-MM-dd'), '-triage-report.csv')}",
@@ -252,7 +252,7 @@
             "Send_email_with_attachment": {
                 "type": "Http",
                 "inputs": {
-                    "uri": "https://func-email-triage-dev-chedbdgjhnbgcyhn.uksouth-01.azurewebsites.net/api/send_report?code=R-u1pgM845SUktP-9eSpUIYO51beryuqGzdwu6U5WmRaAzFubvMlfw==",
+                    "uri": "https://REPLACE_WITH_YOUR_FUNCTION_APP_HOSTNAME/api/send_report?code=REPLACE_WITH_YOUR_FUNCTION_HOST_KEY",
                     "method": "POST",
                     "headers": {
                         "Content-Type": "application/json"
@@ -289,7 +289,7 @@
                         "Permissions": "Read",
                         "ExpiryTime": "@addHours(utcNow(), 24)"
                     },
-                    "path": "/v2/datasets/@{encodeURIComponent('rgemailtriagedevaef4')}/CreateSharedLinkByPath",
+                    "path": "/v2/datasets/@{encodeURIComponent('REPLACE_WITH_YOUR_STORAGE_ACCOUNT_NAME')}/CreateSharedLinkByPath",
                     "queries": {
                         "path": "/email-triage-output/@{concat(formatDateTime(utcNow(), 'yyyy-MM-dd'), '-triage-report.csv')}"
                     }
@@ -314,8 +314,8 @@
             "type": "Object",
             "value": {
                 "keyvault-1": {
-                    "id": "/subscriptions/a55387e7-ecf8-493a-8e9e-2e2467638f07/providers/Microsoft.Web/locations/uksouth/managedApis/keyvault",
-                    "connectionId": "/subscriptions/a55387e7-ecf8-493a-8e9e-2e2467638f07/resourceGroups/rg-email-triage-dev/providers/Microsoft.Web/connections/keyvault-1",
+                    "id": "/subscriptions/REPLACE_WITH_YOUR_SUBSCRIPTION_ID/providers/Microsoft.Web/locations/uksouth/managedApis/keyvault",
+                    "connectionId": "/subscriptions/REPLACE_WITH_YOUR_SUBSCRIPTION_ID/resourceGroups/rg-email-triage-dev/providers/Microsoft.Web/connections/keyvault-1",
                     "connectionName": "keyvault-1",
                     "connectionProperties": {
                         "authentication": {
@@ -324,8 +324,8 @@
                     }
                 },
                 "azureblob": {
-                    "id": "/subscriptions/a55387e7-ecf8-493a-8e9e-2e2467638f07/providers/Microsoft.Web/locations/uksouth/managedApis/azureblob",
-                    "connectionId": "/subscriptions/a55387e7-ecf8-493a-8e9e-2e2467638f07/resourceGroups/rg-email-triage-dev/providers/Microsoft.Web/connections/azureblob",
+                    "id": "/subscriptions/REPLACE_WITH_YOUR_SUBSCRIPTION_ID/providers/Microsoft.Web/locations/uksouth/managedApis/azureblob",
+                    "connectionId": "/subscriptions/REPLACE_WITH_YOUR_SUBSCRIPTION_ID/resourceGroups/rg-email-triage-dev/providers/Microsoft.Web/connections/azureblob",
                     "connectionName": "azureblob",
                     "connectionProperties": {
                         "authentication": {
@@ -334,8 +334,8 @@
                     }
                 },
                 "azureblob-1": {
-                    "id": "/subscriptions/a55387e7-ecf8-493a-8e9e-2e2467638f07/providers/Microsoft.Web/locations/uksouth/managedApis/azureblob",
-                    "connectionId": "/subscriptions/a55387e7-ecf8-493a-8e9e-2e2467638f07/resourceGroups/rg-email-triage-dev/providers/Microsoft.Web/connections/azureblob-1",
+                    "id": "/subscriptions/REPLACE_WITH_YOUR_SUBSCRIPTION_ID/providers/Microsoft.Web/locations/uksouth/managedApis/azureblob",
+                    "connectionId": "/subscriptions/REPLACE_WITH_YOUR_SUBSCRIPTION_ID/resourceGroups/rg-email-triage-dev/providers/Microsoft.Web/connections/azureblob-1",
                     "connectionName": "azureblob-1",
                     "connectionProperties": {}
                 }
